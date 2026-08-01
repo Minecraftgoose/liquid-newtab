@@ -18,7 +18,7 @@ uniform float uHasTex;
 uniform vec2  uTexSize;
 out vec4 outColor;
 
-// ---------- 背景:壁纸纹理 (cover-fit),加载失败降级程序化地图 ----------
+// ---------- 背景:壁纸纹理 (cover-fit),无壁纸时纯黑 ----------
 // blurR>0 时按苹果的 blur→mip 映射取 LOD: lod = log2(r<2 ? r/2+1 : r)
 vec3 bgcol(vec2 p, float blurR){
   if (uHasTex > 0.5) {
@@ -27,20 +27,7 @@ vec3 bgcol(vec2 p, float blurR){
     float lod = max(0.0, log2(blurR < 2.0 ? blurR * 0.5 + 1.0 : blurR));
     return textureLod(uTex, clamp(uv, vec2(0.002), vec2(0.998)), lod).rgb;
   }
-  vec2 st = p / uRes.y;
-  vec2 g  = fract(st * 6.0) - 0.5;
-  float street = smoothstep(0.43, 0.455, max(abs(g.x), abs(g.y)));
-  vec3 c = mix(vec3(0.90, 0.885, 0.85), vec3(0.985, 0.975, 0.96), street);
-  c = mix(c, vec3(0.78, 0.88, 0.71), 1.0 - smoothstep(0.10, 0.30, length(st - vec2(0.33, 0.62))));
-  c = mix(c, vec3(0.69, 0.83, 0.93), 1.0 - smoothstep(0.15, 0.42, length(st - vec2(1.55, 0.40))));
-  for (int i = 0; i < 6; i++) {
-    vec2 q = vec2(0.21 + 0.27 * float(i), fract(0.37 + 0.61 * float(i)) * 0.8 + 0.12);
-    float d = length(st - q) * uRes.y;
-    c = mix(c, vec3(0.95, 0.45, 0.25), 1.0 - smoothstep(7.0, 9.0, d));
-    c = mix(c, vec3(1.0), 1.0 - smoothstep(2.5, 4.0, d));
-  }
-  c *= 1.0 - 0.10 * st.y / (uRes.x / uRes.y);   // 轻微纵向渐变
-  return c;
+  return vec3(0.0);   // 程序化背景:纯黑
 }
 
 // ---------- rounded-box SDF + 解析梯度 ----------
@@ -474,7 +461,7 @@ bind('ZE', v => P.ze = v / 100, v => (v / 100).toFixed(2));
   box.addEventListener('keydown', function(e){
     if(e.key !== 'Enter') return;
     var q = box.value.trim(); if(!q) return;
-    var looksUrl = /^(https?:\/\/|[\w-]+\.[a-z]{2,})(\/\S*)?$/i.test(q);
+    var looksUrl = /^https?:\/\//i.test(q) || /^[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/i.test(q);
     if(looksUrl){ window.location.href = /^https?:\/\//i.test(q) ? q : 'https://' + q; return; }
     var tpl = engineTemplate();
     if(tpl.indexOf('%s') >= 0) window.location.href = tpl.replace('%s', encodeURIComponent(q));
