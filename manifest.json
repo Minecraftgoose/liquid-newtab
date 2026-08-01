@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Glass New Tab",
+  "version": "1.0",
+  "description": "极简的液态玻璃新标签页",
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
+  },
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "host_permissions": [
+    "https://www.bing.com/*",
+    "https://cn.bing.com/*"
+  ]
+}

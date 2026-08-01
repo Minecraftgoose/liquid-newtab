@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style>body {transition: opacity ease-in 0.2s; } 
+body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } 
+</style>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>liquid-newtab-新标签页</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;color:#1d1d1f;font:13px/1.5 -apple-system,system-ui,sans-serif;
+    display:flex;min-height:100vh;overflow:hidden}
+  #stage{flex:1;position:relative;height:100vh;cursor:grab;touch-action:none}
+  #gl{display:block;width:100%;height:100%}
+  #hint{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);
+    color:rgba(0,0,0,.35);font-size:15px;font-weight:600;pointer-events:none;
+    transition:opacity .4s}
+  #search{position:absolute;display:flex;align-items:center;opacity:0;
+    pointer-events:none;transition:opacity .25s}
+  #search input{flex:1;height:100%;border:none;outline:none;background:transparent;
+    font:400 17px/1 -apple-system,system-ui,"SF Pro Text",sans-serif;letter-spacing:.1px;
+    color:#fff;caret-color:transparent;padding:0 10px;
+    text-shadow:0 1px 5px rgba(0,0,0,.35)}
+  #search input::placeholder{color:rgba(235,235,245,.45)}
+  #search svg{flex:none;color:#fff;opacity:.72;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))}
+  #search .ic{margin-left:20px}
+  #search .mic{margin-right:20px}
+  @media (max-width:600px){
+    #search input{font-size:16px;padding:0 8px}
+    #search .ic{margin-left:14px}
+    #search .mic{margin-right:14px}
+    #caret{height:19px}
+    #panel{width:100vw;border-left:none;border-top:1px solid #e2e2e6}
+  }
+  #caret{position:absolute;width:2px;height:21px;top:50%;transform:translateY(-50%);
+    border-radius:1px;background:#fff;display:none;pointer-events:none;
+    box-shadow:0 0 5px rgba(255,255,255,.95),0 0 14px rgba(255,255,255,.5);
+    animation:blink 1.12s step-end infinite}
+  @keyframes blink{0%,60%{opacity:1}61%,100%{opacity:0}}
+  #search input,#search svg{opacity:0}
+  #search.appear input{animation:mat .55s ease-out both}
+  #search.appear svg{animation:mat .55s ease-out both}
+  @keyframes mat{from{opacity:0;filter:blur(9px) drop-shadow(0 1px 3px rgba(0,0,0,.3))}
+                 to{opacity:1;filter:blur(0) drop-shadow(0 1px 3px rgba(0,0,0,.3))}}
+  #panel{width:300px;height:100vh;overflow-y:auto;padding:24px 20px;
+    position:absolute;top:0;right:0;z-index:2;color:#f2f2f5;
+    background:rgba(20,20,24,.55);backdrop-filter:blur(24px) saturate(150%);
+    -webkit-backdrop-filter:blur(24px) saturate(150%);
+    border-left:1px solid rgba(255,255,255,.14);box-shadow:-14px 0 44px rgba(0,0,0,.4);
+    transform:translateX(100%);transition:transform .28s ease;
+    scrollbar-width:none;-ms-overflow-style:none}
+  #panel::-webkit-scrollbar{display:none}
+  body.panel-open #panel{transform:translateX(0)}
+  #panel h2{font-size:16px;font-weight:600;margin-bottom:3px;color:#fff;letter-spacing:.01em}
+  #panel .sub{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:20px}
+  .grp{margin-bottom:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+    border-radius:14px;overflow:hidden;position:relative}
+  .grp.open{overflow:visible;z-index:50}
+  .grp .gh{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);
+    padding:13px 14px;cursor:pointer;user-select:none;display:flex;align-items:center;
+    justify-content:space-between;transition:background .2s}
+  .grp .gh:hover{background:rgba(255,255,255,.05)}
+  .grp .gh::after{content:'';width:8px;height:8px;border-right:1.6px solid rgba(255,255,255,.5);
+    border-bottom:1.6px solid rgba(255,255,255,.5);transform:rotate(-45deg);transition:transform .25s}
+  .grp.open .gh::after{transform:rotate(45deg)}
+  .grp-body{max-height:0;overflow:hidden;transition:max-height .28s ease;padding:0 14px}
+  .grp.open .grp-body{max-height:600px;overflow:visible;padding:0 14px 16px}
+  .grp:not(.open) .c-select-dp{display:none}
+  .row{margin-bottom:14px}
+  .row label{display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,.85);margin-bottom:6px}
+  .row label .v{color:#8fb6ff;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:#8fb6ff;height:3px;cursor:pointer}
+  .hint{font-size:10px;color:rgba(255,255,255,.4);margin-top:6px;line-height:1.6}
+  code{font-size:10px;background:rgba(255,255,255,.12);padding:1px 4px;border-radius:4px}
+  #engineUrl{width:100%;margin-top:8px;padding:9px 11px;border-radius:10px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+    color:#fff;font:13px/1.4 -apple-system,system-ui,sans-serif;outline:none;box-sizing:border-box}
+  #engineUrl::placeholder{color:rgba(255,255,255,.4)}
+  .c-select{position:relative;margin-top:8px}
+  .c-select-btn{width:100%;display:flex;align-items:center;justify-content:space-between;
+    padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.18);color:#fff;
+    font:13px/1.4 -apple-system,system-ui,sans-serif;cursor:pointer;outline:none;text-align:left}
+  .c-select-btn svg{flex-shrink:0;margin-left:6px;color:rgba(255,255,255,.5);transition:transform .2s}
+  .c-select.open .c-select-btn svg{transform:rotate(180deg)}
+  .c-select-dp{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:100;
+    background:rgba(28,28,34,.92);backdrop-filter:blur(20px) saturate(140%);
+    -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid rgba(255,255,255,.14);border-radius:12px;
+    padding:6px 0;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+  .c-select.open .c-select-dp{display:block}
+  .c-opt{padding:9px 14px;font:13px/1.4 -apple-system,system-ui,sans-serif;
+    color:rgba(255,255,255,.85);cursor:pointer;transition:background .15s}
+  .c-opt:hover{background:rgba(255,255,255,.1);color:#fff}
+  .c-opt.active{color:#8fb6ff}
+  #bgUploadBtn{display:none;margin-top:10px;width:100%;padding:10px 14px;border-radius:10px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+    color:rgba(255,255,255,.8);font:13px/1 -apple-system,system-ui,sans-serif;
+    cursor:pointer;outline:none;transition:background .2s}
+  #bgUploadBtn:hover{background:rgba(255,255,255,.15)}
+  #bgHint{font-size:11px;color:rgba(255,255,255,.5);margin-top:8px}
+  .about p{font-size:12px;line-height:1.7;color:rgba(255,255,255,.7)}
+  .about .about-link{display:inline-block;margin-top:6px;font-size:12px;color:#8fb6ff;
+    text-decoration:none;word-break:break-all}
+  .about .about-link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl" width="601" height="439"></canvas>
+  <div id="hint">往下拽 </div>
+  <div id="search" style="opacity: 0; pointer-events: none;">
+    <svg class="ic" viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.5"></circle><path d="M12.8 12.8 17 17"></path></svg>
+    <input id="searchInput" placeholder="Search or Ask" spellcheck="false" autocomplete="off">
+    <svg class="ic mic" viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="7.2" y="2.2" width="5.6" height="9.6" rx="2.8"></rect><path d="M4.6 9.6a5.4 5.4 0 0 0 10.8 0"></path><path d="M10 15v2.6"></path></svg>
+    <span id="caret" style="display: none;"></span>
+  </div>
+</div>
+<div id="panel">
+  <h2>设置</h2>
+  <div class="sub">液态玻璃新标签页</div>
+
+  <div class="grp">
+    <div class="gh">背景</div>
+    <div class="c-select" id="bgModeWrap">
+      <button type="button" class="c-select-btn" id="bgModeBtn"><span id="bgModeLabel">必应每日壁纸</span><svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg></button>
+      <div class="c-select-dp" id="bgModeDp">
+        <div class="c-opt" data-val="bing">必应每日壁纸</div>
+        <div class="c-opt" data-val="custom">自定义图片</div>
+        <div class="c-opt" data-val="procedural">纯色程序化</div>
+      </div>
+    </div>
+    <input type="file" id="bgUpload" accept="image/*" style="display:none">
+    <button id="bgUploadBtn" type="button">选择图片</button>
+    <div id="bgHint"></div>
+  </div>
+
+  <div class="grp">
+    <div class="gh">外观</div>
+    <div class="row"><label for="K">融合 <span class="v" id="vK">64</span></label><input id="K" type="range" min="10" max="160" value="64"></div>
+    <div class="row"><label for="LW">透镜高度 <span class="v" id="vLW">18</span></label><input id="LW" type="range" min="4" max="60" value="18"></div>
+    <div class="row"><label for="ST">折射 <span class="v" id="vST">14</span></label><input id="ST" type="range" min="0" max="120" value="14"></div>
+    <div class="row"><label for="DM">高光 <span class="v" id="vDM">1.50</span></label><input id="DM" type="range" min="0" max="150" value="150"></div>
+    <div class="row"><label for="AB">色差 <span class="v" id="vAB">0.12</span></label><input id="AB" type="range" min="0" max="35" value="12"></div>
+    <div class="row"><label for="CT">黑玻璃 <span class="v" id="vCT">0.50</span></label><input id="CT" type="range" min="0" max="100" value="50"></div>
+  </div>
+
+  <div class="grp">
+    <div class="gh">弹性</div>
+    <div class="row"><label for="OM">频率 <span class="v" id="vOM">11.0</span></label><input id="OM" type="range" min="40" max="220" value="110"></div>
+    <div class="row"><label for="ZE">阻尼 <span class="v" id="vZE">0.72</span></label><input id="ZE" type="range" min="30" max="120" value="72"></div>
+  </div>
+
+  <div class="grp">
+    <div class="gh">搜索引擎</div>
+    <div class="c-select" id="engineWrap">
+      <button type="button" class="c-select-btn" id="engineBtn"><span id="engineLabel">必应 Bing</span><svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg></button>
+      <div class="c-select-dp" id="engineDp">
+        <div class="c-opt" data-val="Bing">必应 Bing</div>
+        <div class="c-opt" data-val="百度">百度</div>
+        <div class="c-opt" data-val="Google">谷歌 Google</div>
+        <div class="c-opt" data-val="DuckDuckGo">DuckDuckGo</div>
+        <div class="c-opt" data-val="__custom__">自定义…</div>
+      </div>
+    </div>
+    <input id="engineUrl" type="text" placeholder="自定义模板，用 %s 代替关键词" spellcheck="false" style="display:none">
+  </div>
+
+  <div class="grp">
+    <div class="gh">关于</div>
+    <div class="about">
+      <p>极简的液态玻璃新标签页</p>
+      <p>视觉效果移植自开源项目 siri-glsl（MIT），上游仓库：</p>
+      <a class="about-link" href="https://github.com/aaaa-zhen/siri-glsl" target="_blank" rel="noopener">github.com/aaaa-zhen/siri-glsl</a>
+      <p style="margin-top:8px">作者：</p>
+      <a class="about-link" href="https://github.com/Minecraftgoose" target="_blank" rel="noopener">github.com/Minecraftgoose</a>
+    </div>
+  </div>
+</div>
+
+<script src="collapse.js"></script>
+<script src="app.js"></script>
+
+
+</body></html>
