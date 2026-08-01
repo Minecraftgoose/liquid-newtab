@@ -42,6 +42,17 @@
 1. 在浏览器地址栏输入`chrome://flags/#extension-mime-request-handling`回车后将黄色荧光标记的选项调整为`Always prompt for install`后重新下载
 2. 在浏览器地址栏输入`chrome://extensions/`打开开发者模式，将解压后的zip导入
 
+### Firefox 用户
+
+> ⚠️ 本扩展的 `.xpi` 包**未签名**，Firefox 默认拒绝安装未签名扩展。安装前**必须先关闭签名验证**：
+
+1. 地址栏输入 `about:config` 回车，点击「接受风险并继续」
+2. 搜索 `xpinstall.signatures.required`
+3. 将该项改为 `false`
+4. 到发行版下载 `liquid-newtab-firefox.xpi` 并安装
+
+> 装完后到 `about:addons` → 该扩展 → 权限，手动同意「替换新标签页」（Firefox 强制要求用户确认，非脚本可绕过）。
+
 
 
 ## 使用
@@ -86,6 +97,17 @@ A minimal liquid-glass new-tab extension for browsers. Open a new tab to get a l
 Follow these steps in order
 1. In the address bar enter `chrome://flags/#extension-mime-request-handling`, press Enter, set the yellow-highlighted option to `Always prompt for install`, then re-download
 2. In the address bar enter `chrome://extensions/`, enable Developer mode, and import the extracted zip
+
+### Firefox users
+
+> ⚠️ The `.xpi` package is **unsigned**; Firefox refuses to install unsigned extensions by default. **You must disable signature verification first:**
+
+1. Enter `about:config` in the address bar and press Enter, then click "Accept the Risk and Continue"
+2. Search for `xpinstall.signatures.required`
+3. Set it to `false`
+4. Download `liquid-newtab-firefox.xpi` from the release and install it
+
+> After installing, go to `about:addons` → this extension → Permissions and manually allow "Replace new tab" (Firefox requires explicit user confirmation; it cannot be bypassed by script).
 
 ## Usage
 
