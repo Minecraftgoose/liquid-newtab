@@ -14,18 +14,37 @@ uniform float uHeight, uRefract, uHlAmt, uAb, uDpr, uCont;
 uniform float uDark;   // 液滴材质 1=贴边黑玻璃 0=落地浅磨砂
 uniform float uValid;
 uniform sampler2D uTex;
+uniform sampler2D uTex2;   // 上一张壁纸(过渡用)
 uniform float uHasTex;
+uniform float uMix;        // 过渡进度 0→1
+uniform float uDir;        // 1=新图从下往上滑入, -1=从上往下
 uniform vec2  uTexSize;
 out vec4 outColor;
 
 // ---------- 背景:壁纸纹理 (cover-fit),无壁纸时纯黑 ----------
 // blurR>0 时按苹果的 blur→mip 映射取 LOD: lod = log2(r<2 ? r/2+1 : r)
+vec3 sampleTex(sampler2D t, vec2 p, float blurR){
+  float s  = max(uRes.x / uTexSize.x, uRes.y / uTexSize.y);
+  vec2  uv = (p - 0.5 * (uRes - uTexSize * s)) / (uTexSize * s);
+  float lod = max(0.0, log2(blurR < 2.0 ? blurR * 0.5 + 1.0 : blurR));
+  return textureLod(t, clamp(uv, vec2(0.002), vec2(0.998)), lod).rgb;
+}
 vec3 bgcol(vec2 p, float blurR){
   if (uHasTex > 0.5) {
-    float s  = max(uRes.x / uTexSize.x, uRes.y / uTexSize.y);
-    vec2  uv = (p - 0.5 * (uRes - uTexSize * s)) / (uTexSize * s);
-    float lod = max(0.0, log2(blurR < 2.0 ? blurR * 0.5 + 1.0 : blurR));
-    return textureLod(uTex, clamp(uv, vec2(0.002), vec2(0.998)), lod).rgb;
+    // 过渡中:新图从 uDir 侧滑入,旧图(uTex2)向反方向滑出(推拉门)
+    if (uMix < 1.0) {
+      float t = uMix;                            // 0→1
+      float newOff = (1.0 - t) * uRes.y * uDir;  // 新图滑入位移(初始在屏外)
+      float oldOff = t * uRes.y * (-uDir);       // 旧图反向滑出位移(最终出屏)
+      vec2 pn = p + vec2(0.0, newOff);           // 新图采样坐标
+      vec2 po = p + vec2(0.0, oldOff);           // 旧图采样坐标
+      float inNew = 1.0 - smoothstep(0.0, 2.0, max(-pn.y, pn.y - uRes.y));
+      float inOld = 1.0 - smoothstep(0.0, 2.0, max(-po.y, po.y - uRes.y));
+      vec3 c = mix(vec3(0.0), sampleTex(uTex2, po, blurR), inOld);
+      c = mix(c, sampleTex(uTex, pn, blurR), inNew);
+      return c;
+    }
+    return sampleTex(uTex, p, blurR);
   }
   return vec3(0.0);   // 程序化背景:纯黑
 }
@@ -151,11 +170,13 @@ gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
 gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
 gl.linkProgram(prog); gl.useProgram(prog);
 const U = {}; ['uRes','uBlob','uEdge','uK','uHeight','uRefract','uHlAmt','uAb','uDpr','uDark',
-  'uCont','uValid','uTex','uHasTex','uTexSize'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  'uCont','uValid','uTex','uTex2','uHasTex','uMix','uDir','uTexSize'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
 gl.uniform1i(U.uTex, 0);
+gl.uniform1i(U.uTex2, 1);
 
 // ---------- 壁纸:必应每日 / 用户上传 / 程序化,可在设置面板切换 ----------
 let hasTex = 0, texSize = [1, 1];
+let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,-1=下滑)
 {
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -163,42 +184,229 @@ let hasTex = 0, texSize = [1, 1];
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-  function apply(im){
+  let prevImg = null;   // 上一张壁纸 Image(过渡用)
+  const tex2 = gl.createTexture();
+
+  function apply(im, animate){
     try {
+      // 过渡:把上一张喂进 tex2(需先上传 tex2,再覆盖 tex)
+      if (animate && prevImg && prevImg !== im){
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, tex2);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, prevImg);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        mixAmt = 0;
+      } else mixAmt = 1;
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, im);
       gl.generateMipmap(gl.TEXTURE_2D);
       hasTex = 1; texSize = [im.width, im.height];
+      prevImg = im;
     } catch (e) { /* 纹理跨域被拦 -> 程序化背景 */ }
+  }
+
+  // ---- 必应壁纸:绝对日期制(不是相对天数) ----
+  // bingAbs = 当前显示壁纸的日期(YYYYMMDD);idx = 今天 - bingAbs 的天数差
+  // 明天打开仍显示同一张;直到掉出窗口(>7天)才回退到今天
+  const WALL_DAYS = 7;                       // 必应壁纸窗口:今天往前 7 天(共 8 张)
+  function toAbs(d){ const m = d.getMonth()+1, dd = d.getDate();
+    return '' + d.getFullYear() + (m<10?'0':'') + m + (dd<10?'0':'') + dd; }   // 固定 8 位 YYYYMMDD
+  function parseAbs(s){ return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8)); }
+  function dayDiff(a, b){ return Math.round((parseAbs(a) - parseAbs(b)) / 86400000); }   // a - b 天数
+
+  let todayAbs = toAbs(new Date());
+  let bingAbs = localStorage.getItem('nt_bing_abs');
+  // 兼容旧版本(只有相对 idx):换算成绝对日期
+  if (!bingAbs && localStorage.getItem('nt_bing_idx')){
+    const old = parseInt(localStorage.getItem('nt_bing_idx'), 10) || 0;
+    bingAbs = toAbs(new Date(Date.now() - old * 86400000));
+  }
+  let bingIdx = 0;
+  if (bingAbs){
+    const diff = dayDiff(todayAbs, bingAbs);
+    if (diff >= 0 && diff <= WALL_DAYS) bingIdx = diff;   // 在窗口内:保持显示
+    else bingAbs = todayAbs;                               // 掉出窗口:回退到今天
+  } else bingAbs = todayAbs;
+  localStorage.setItem('nt_bing_abs', bingAbs);
+  localStorage.removeItem('nt_bing_idx');
+
+  // ---- 壁纸缓存:IndexedDB(存 Blob,容量大,异步不卡主线程) ----
+  // key = 壁纸绝对日期,跨天不失效(同一张壁纸永远同一 key)
+  function cacheKey(){ return 'nt_bg_cache_' + bingAbs; }
+
+  const idb = {
+    db: null,
+    open(){
+      return new Promise((res, rej) => {
+        if (this.db) return res(this.db);
+        const req = indexedDB.open('liquid-wall', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('wall')) db.createObjectStore('wall');
+        };
+        req.onsuccess = () => { this.db = req.result; res(this.db); };
+        req.onerror = () => rej(req.error);
+      });
+    },
+    get(key){
+      return this.open().then(db => new Promise((res, rej) => {
+        const r = db.transaction('wall', 'readonly').objectStore('wall').get(key);
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      }));
+    },
+    set(key, value){
+      return this.open().then(db => new Promise((res, rej) => {
+        const r = db.transaction('wall', 'readwrite').objectStore('wall').put(value, key);
+        r.onsuccess = () => res();
+        r.onerror = () => rej(r.error);
+      }));
+    },
+    // 删掉窗口外([今天-7,今天])的缓存 key(防塞爆)
+    pruneOld(){
+      return this.open().then(db => new Promise((res) => {
+        const store = db.transaction('wall', 'readwrite').objectStore('wall');
+        const r = store.openCursor();
+        r.onsuccess = () => {
+          const cur = r.result;
+          if (cur){
+            const k = String(cur.key);
+            const abs = k.indexOf('nt_bg_cache_') === 0 ? k.slice('nt_bg_cache_'.length) : '';
+            const diff = abs ? dayDiff(todayAbs, abs) : 1;   // 解析不出日期当窗口外删掉
+            if (diff < 0 || diff > WALL_DAYS) store.delete(cur.key);
+            cur.continue();
+          } else res();
+        };
+        r.onerror = () => res();
+      }));
+    }
+  };
+
+  // canvas 压缩成 Blob(JPEG .85,与自定义上传同口径)
+  function toCacheBlob(im){
+    return new Promise((res) => {
+      try {
+        const max = 1920; let w = im.width, h = im.height;
+        if (w > max || h > max){ const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r); }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(im, 0, 0, w, h);
+        c.toBlob(b => res(b), 'image/jpeg', 0.85);
+      } catch (e) { res(null); }
+    });
   }
 
   function loadBing(){
     (async () => {
       try {
-        const api = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=zh-CN';
+        const key = cacheKey();
+        const infoEl = document.getElementById('wallInfo');
+        const infoLS = 'nt_bg_cache_info_' + key;
+        // 1) 命中缓存:读 Blob 直接应用,零请求
+        const cached = await idb.get(key);
+        if (cached){
+          const objUrl = URL.createObjectURL(cached);
+          const im = new Image();
+          im.onload = () => { apply(im, true); URL.revokeObjectURL(objUrl); };
+          im.src = objUrl;
+          const ci = localStorage.getItem(infoLS);
+          if (infoEl && ci) infoEl.textContent = ci;
+          return;
+        }
+        // 2) 未命中:请求 + 压缩存 IDB
+        const api = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=' + bingIdx + '&n=1&mkt=zh-CN';
         const meta = await fetch(api).then(r => r.json());
-        const rel = meta.images && meta.images[0] && meta.images[0].url;
+        const img = meta.images && meta.images[0];
+        const rel = img && img.url;
         if (!rel) return;
+        if (img.copyright){
+          if (infoEl) infoEl.textContent = img.copyright;
+          try { localStorage.setItem(infoLS, img.copyright); } catch (e) {}
+        }
         const full = rel.startsWith('http') ? rel : 'https://www.bing.com' + rel;
         const blob = await fetch(full).then(r => r.blob());
         const objUrl = URL.createObjectURL(blob);
         const im = new Image();
-        im.onload = () => { apply(im); URL.revokeObjectURL(objUrl); };
+        im.onload = () => {
+          apply(im, true);
+          URL.revokeObjectURL(objUrl);
+          // 压缩后存 IDB(存失败静默,下次再请求)
+          toCacheBlob(im).then(cb => {
+            if (cb) idb.set(key, cb).then(() => idb.pruneOld()).catch(() => {});
+          });
+        };
         im.src = objUrl;
       } catch (e) { /* 离线/被墙 -> 程序化背景 */ }
     })();
+  }
+
+  // 预加载指定日期(abs)的壁纸到 IDB(不显示):让下次滚轮切换直接命中缓存,秒切
+  function prefetchWall(abs){
+    const diff = dayDiff(todayAbs, abs);
+    if (diff < 0 || diff > WALL_DAYS) return;   // 出窗口不预取
+    const key = 'nt_bg_cache_' + abs;
+    // 已缓存就不重复下载
+    idb.get(key).then(cached => {
+      if (cached) return;
+      (async () => {
+        try {
+          const api = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=' + diff + '&n=1&mkt=zh-CN';
+          const meta = await fetch(api).then(r => r.json());
+          const img = meta.images && meta.images[0];
+          const rel = img && img.url;
+          if (!rel) return;
+          const infoLS = 'nt_bg_cache_info_' + key;
+          if (img.copyright){
+            try { localStorage.setItem(infoLS, img.copyright); } catch (e) {}
+          }
+          const full = rel.startsWith('http') ? rel : 'https://www.bing.com' + rel;
+          const blob = await fetch(full).then(r => r.blob());
+          const objUrl = URL.createObjectURL(blob);
+          const im = new Image();
+          im.onload = () => {
+            URL.revokeObjectURL(objUrl);
+            toCacheBlob(im).then(cb => {
+              if (cb) idb.set(key, cb).catch(() => {});
+            });
+          };
+          im.src = objUrl;
+        } catch (e) { /* 预取失败无所谓,切到时再请求 */ }
+      })();
+    }).catch(() => {});
   }
 
   function loadWallpaper(){
     const mode = localStorage.getItem('nt_bg_mode') || 'bing';
     if (mode === 'custom') {
       const data = localStorage.getItem('nt_bg');
-      if (data) { const im = new Image(); im.onload = () => apply(im); im.src = data; return; }
+      if (data) { const im = new Image(); im.onload = () => apply(im, true); im.src = data; return; }
     }
     if (mode === 'bing' || mode === 'custom') loadBing();
     // procedural: 不加载, hasTex 保持 0 -> 程序化背景
   }
   loadWallpaper();
+
+  // 换壁纸:仅必应模式;dir=1 往后翻(更旧),dir=-1 往前翻(更新);绝对日期持久化
+  // 边界:窗口 = [今天-7, 今天],出窗口禁止再滚
+  window.nextWallpaper = function(dir){
+    const mode = localStorage.getItem('nt_bg_mode') || 'bing';
+    if (mode !== 'bing') return;
+    const step = (dir === -1) ? -1 : 1;
+    // 滚下(dir=1)=看更旧=日期减一天;滚上(dir=-1)=看更新=日期加一天
+    const nextAbs = toAbs(new Date(parseAbs(bingAbs).getTime() - step * 86400000));
+    const diff = dayDiff(todayAbs, nextAbs);
+    if (diff < 0 || diff > WALL_DAYS) return;   // 到头:不加载不动画不存
+    mixDir = (dir === -1) ? -1 : 1;   // 滚下→新图从下方滑入,滚上→从上方滑入
+    bingAbs = nextAbs;
+    bingIdx = diff;
+    localStorage.setItem('nt_bing_abs', bingAbs);
+    loadBing();
+    // 预取同方向下一张:下次滚轮直接命中缓存
+    prefetchWall(toAbs(new Date(parseAbs(nextAbs).getTime() - step * 86400000)));
+  };
 
   // 面板:背景来源切换(自定义下拉) + 上传
   const bgUpload = document.getElementById('bgUpload');
@@ -388,6 +596,10 @@ function frame(now){
   gl.uniform1f(U.uCont, Math.max(0, Math.min(1, sp.cont.x)) * P.cont);
   gl.uniform1f(U.uValid, state === 'IDLE' ? 0 : 1);
   gl.uniform1f(U.uHasTex, hasTex);
+  // 壁纸过渡:推进 uMix,完成后保持 1
+  if (mixAmt < 1){ mixAmt = Math.min(1, mixAmt + dt / 0.3); }
+  gl.uniform1f(U.uMix, mixAmt);
+  gl.uniform1f(U.uDir, mixDir);
   gl.uniform2f(U.uTexSize, texSize[0], texSize[1]);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -529,4 +741,63 @@ bind('ZE', v => P.ze = v / 100, v => (v / 100).toFixed(2));
     if(v) localStorage.setItem('nt_engine_url', v);
     else localStorage.removeItem('nt_engine_url');
   });
+})();
+
+// ============ 新功能:打字机问候语 / 换壁纸按钮 / '/' 聚焦 ============
+(function(){
+  // 打字机问候语(只在搜索胶囊未出现时显示,出现后淡出)
+  const greet = document.getElementById('greet');
+  const greetText = document.getElementById('greetText');
+  const greetCursor = document.getElementById('greetCursor');
+  function greetMsg(){
+    const h = new Date().getHours();
+    if (h < 5) return '夜深了，早点休息';
+    if (h < 9) return '早上好';
+    if (h < 12) return '上午好';
+    if (h < 14) return '中午好';
+    if (h < 18) return '下午好';
+    return '晚上好';
+  }
+  function typeGreet(){
+    if (!greet || !greetText) return;
+    const msg = greetMsg();
+    greet.style.opacity = '1';
+    greetCursor.style.display = 'inline-block';
+    let i = 0;
+    (function tick(){
+      if (i <= msg.length){
+        greetText.textContent = msg.slice(0, i);
+        i++;
+        setTimeout(tick, 140);
+      } else {
+        // 打完后光标继续闪烁,不重复
+        setTimeout(() => { if (greet) greet.style.opacity = '0'; }, 4000);
+      }
+    })();
+  }
+  typeGreet();
+
+  // 滚轮换壁纸(仅必应模式):排除面板区域,防抖 400ms
+  let wheelLock = 0;
+  document.addEventListener('wheel', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#panel')) return;
+    if (e.target && e.target.closest && e.target.closest('#search')) return;
+    const now = Date.now();
+    if (now - wheelLock < 250) return;
+    wheelLock = now;
+    if (typeof window.nextWallpaper === 'function') window.nextWallpaper(e.deltaY > 0 ? 1 : -1);
+  }, { passive: true });
+
+  // '/' 聚焦搜索框(在输入框内按 / 不抢焦点)
+  const box = document.getElementById('searchInput');
+  if (box){
+    document.addEventListener('keydown', (e) => {
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey){
+        e.preventDefault();
+        box.focus();
+      }
+    });
+  }
 })();

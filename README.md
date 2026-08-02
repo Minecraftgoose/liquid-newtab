@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Manifest_V3-blue.svg" alt="Manifest V3">
-  <img src="https://img.shields.io/badge/version-1.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.3-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/Chromium-compatible-important.svg" alt="Chromium">
   <img src="https://img.shields.io/badge/WebGL2-shader-9cf.svg" alt="WebGL2">
@@ -29,6 +29,11 @@
 
 - 液态玻璃搜索框：从顶部黑边往下拖拽，液滴渗出、弹簧形变成搜索胶囊
 - 必应每日壁纸背景，液态玻璃直接折射壁纸
+- **滚轮换壁纸**：滚动切换最近 8 天必应壁纸，推拉门切换动画，索引跨天保持（掉出窗口自动回退最新）
+- **壁纸信息角标**：右下角显示当前壁纸标题与摄影师
+- **打字机问候语**：按时段逐字打出问候，带闪烁光标
+- **壁纸缓存**：IndexedDB 存储，当天/翻过的壁纸零请求秒开
+- **`/` 快捷键**：任意位置按 `/` 聚焦搜索框
 - 可自定义背景：必应每日壁纸 / 自定义上传图片 / 纯色程序化
 - 可自定义搜索引擎：必应 / 百度 / 谷歌 / DuckDuckGo / 自定义模板（`%s` 占位）
 - 右侧滑出式毛玻璃设置面板，板块可折叠
@@ -60,6 +65,8 @@
 - 从屏幕最上边往下拖，液态玻璃搜索胶囊从边缘渗出
 - 输入回车搜索（输入像网址则直接打开）
 - 鼠标移到屏幕右侧唤出设置面板，点板块标题展开 / 收起
+- **滚轮滚动**切换必应壁纸（滚下看更旧，滚上看更新）
+- 按 **`/`** 快速聚焦搜索框
 
 ## 技术栈
 
@@ -85,6 +92,11 @@ A minimal liquid-glass new-tab extension for browsers. Open a new tab to get a l
 
 - Liquid-glass search capsule: drag down from the top edge to let the droplet seep out and spring into a search pill
 - Bing daily wallpaper as background, refracted directly through the glass
+- **Scroll to switch wallpaper**: cycle through the last 8 days of Bing wallpapers with a push-pull transition; index persists across days (falls back to the latest when out of range)
+- **Wallpaper info badge**: title and photographer shown at the bottom-right corner
+- **Typewriter greeting**: greeting typed out character by character with a blinking cursor
+- **Wallpaper caching**: stored in IndexedDB — zero-request instant load for seen wallpapers
+- **`/` shortcut**: press `/` anywhere to focus the search box
 - Customizable background: Bing daily / uploaded image / procedural solid
 - Customizable search engine: Bing / Baidu / Google / DuckDuckGo / custom template (`%s` placeholder)
 - Frosted-glass settings panel slides in from the right, with collapsible sections
@@ -114,6 +126,8 @@ Follow these steps in order
 - Drag down from the top of the screen to seep out the search capsule
 - Type and press Enter to search (directly opens if it looks like a URL)
 - Move the mouse to the right edge to open settings; click a section title to expand / collapse
+- **Scroll** to switch Bing wallpapers (scroll down for older, up for newer)
+- Press **`/`** to quickly focus the search box
 
 ## Tech Stack
 
