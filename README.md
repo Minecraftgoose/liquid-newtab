@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Manifest_V3-blue.svg" alt="Manifest V3">
-  <img src="https://img.shields.io/badge/version-1.3.1-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.3.2-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/Chromium-compatible-important.svg" alt="Chromium">
   <img src="https://img.shields.io/badge/WebGL2-shader-9cf.svg" alt="WebGL2">
