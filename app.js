@@ -548,13 +548,8 @@ stage.addEventListener('pointermove', e => {
 });
 stage.addEventListener('pointerup', () => {
   if (state !== 'DRAG') return;
-  if (pointer.y > stage.clientHeight * 0.32) {       // 拉够了 → 胶囊
-    state = 'CAPSULE'; setMorphSprings();
-    const c = capsuleRect();
-    sp.cx.t = c.x; sp.cy.t = c.y; sp.bx.t = c.w / 2; sp.by.t = c.h / 2;
-    sp.dark.t = 0; sp.k.t = 10;                      // 材质变浅 + 与边缘脱开
-    sp.cont.t = 1;                                   // 黑顶容器淡入
-  } else retract();
+  if (pointer.y > stage.clientHeight * 0.32) wakeCapsule();   // 拉够了 → 胶囊
+  else retract();
 });
 addEventListener('keydown', e => { if (e.key === 'Escape' && state === 'CAPSULE') retract(); });
 
@@ -563,6 +558,16 @@ function retract(){
   sp.cy.t = EDGE * 0.3; sp.bx.t = sp.by.t = 1;
   sp.dark.t = 1; sp.k.t = P.k; sp.cont.t = 0;
   document.getElementById('searchInput').blur();
+}
+
+// '/' 快捷键唤出搜索胶囊(等价于拖拽拉够后松手)
+function wakeCapsule(){
+  if (state === 'CAPSULE') return;
+  state = 'CAPSULE'; setMorphSprings();
+  const c = capsuleRect();
+  sp.cx.t = c.x; sp.cy.t = c.y; sp.bx.t = c.w / 2; sp.by.t = c.h / 2;
+  sp.dark.t = 0; sp.k.t = 10;                      // 材质变浅 + 与边缘脱开
+  sp.cont.t = 1;                                   // 黑顶容器淡入
 }
 
 // ---------- 主循环 ----------
@@ -786,7 +791,7 @@ bind('ZE', v => P.ze = v / 100, v => (v / 100).toFixed(2));
     if (typeof window.nextWallpaper === 'function') window.nextWallpaper(e.deltaY > 0 ? 1 : -1);
   }, { passive: true });
 
-  // '/' 聚焦搜索框(在输入框内按 / 不抢焦点)
+  // '/' 唤出搜索胶囊并聚焦(在输入框内按 / 不抢焦点)
   const box = document.getElementById('searchInput');
   if (box){
     document.addEventListener('keydown', (e) => {
@@ -794,6 +799,7 @@ bind('ZE', v => P.ze = v / 100, v => (v / 100).toFixed(2));
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey){
         e.preventDefault();
+        wakeCapsule();
         box.focus();
       }
     });
