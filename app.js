@@ -225,12 +225,14 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
     const old = parseInt(localStorage.getItem('nt_bing_idx'), 10) || 0;
     bingAbs = toAbs(new Date(Date.now() - old * 86400000));
   }
+  // pinned=用户主动滚动选过非当天壁纸(跨天保持);没滚过则今天打开自动切到今天
+  const pinned = localStorage.getItem('nt_bing_pinned') === '1';
   let bingIdx = 0;
-  if (bingAbs){
+  if (bingAbs && pinned){
     const diff = dayDiff(todayAbs, bingAbs);
     if (diff >= 0 && diff <= WALL_DAYS) bingIdx = diff;   // 在窗口内:保持显示
     else bingAbs = todayAbs;                               // 掉出窗口:回退到今天
-  } else bingAbs = todayAbs;
+  } else bingAbs = todayAbs;                               // 未 pin:总是显示最新
   localStorage.setItem('nt_bing_abs', bingAbs);
   localStorage.removeItem('nt_bing_idx');
 
@@ -304,28 +306,24 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
       try {
         const key = cacheKey();
         const infoEl = document.getElementById('wallInfo');
-        const infoLS = 'nt_bg_cache_info_' + key;
-        // 1) 命中缓存:读 Blob 直接应用,零请求
+        // 1) 命中缓存:读 {blob, copyright} 直接应用,零请求
         const cached = await idb.get(key);
         if (cached){
-          const objUrl = URL.createObjectURL(cached);
+          const objUrl = URL.createObjectURL(cached.blob || cached);
           const im = new Image();
           im.onload = () => { apply(im, true); URL.revokeObjectURL(objUrl); };
           im.src = objUrl;
-          const ci = localStorage.getItem(infoLS);
-          if (infoEl && ci) infoEl.textContent = ci;
+          if (infoEl && cached.copyright) infoEl.textContent = cached.copyright;
           return;
         }
-        // 2) 未命中:请求 + 压缩存 IDB
+        // 2) 未命中:请求 + 压缩存 IDB(含 copyright)
         const api = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=' + bingIdx + '&n=1&mkt=zh-CN';
         const meta = await fetch(api).then(r => r.json());
         const img = meta.images && meta.images[0];
         const rel = img && img.url;
         if (!rel) return;
-        if (img.copyright){
-          if (infoEl) infoEl.textContent = img.copyright;
-          try { localStorage.setItem(infoLS, img.copyright); } catch (e) {}
-        }
+        const copyright = img.copyright || '';
+        if (infoEl && copyright) infoEl.textContent = copyright;
         const full = rel.startsWith('http') ? rel : 'https://www.bing.com' + rel;
         const blob = await fetch(full).then(r => r.blob());
         const objUrl = URL.createObjectURL(blob);
@@ -333,9 +331,9 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
         im.onload = () => {
           apply(im, true);
           URL.revokeObjectURL(objUrl);
-          // 压缩后存 IDB(存失败静默,下次再请求)
+          // 压缩后连同 copyright 一起存 IDB(存失败静默,下次再请求)
           toCacheBlob(im).then(cb => {
-            if (cb) idb.set(key, cb).then(() => idb.pruneOld()).catch(() => {});
+            if (cb) idb.set(key, { blob: cb, copyright }).then(() => idb.pruneOld()).catch(() => {});
           });
         };
         im.src = objUrl;
@@ -358,10 +356,7 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
           const img = meta.images && meta.images[0];
           const rel = img && img.url;
           if (!rel) return;
-          const infoLS = 'nt_bg_cache_info_' + key;
-          if (img.copyright){
-            try { localStorage.setItem(infoLS, img.copyright); } catch (e) {}
-          }
+          const copyright = img.copyright || '';
           const full = rel.startsWith('http') ? rel : 'https://www.bing.com' + rel;
           const blob = await fetch(full).then(r => r.blob());
           const objUrl = URL.createObjectURL(blob);
@@ -369,7 +364,7 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
           im.onload = () => {
             URL.revokeObjectURL(objUrl);
             toCacheBlob(im).then(cb => {
-              if (cb) idb.set(key, cb).catch(() => {});
+              if (cb) idb.set(key, { blob: cb, copyright }).catch(() => {});
             });
           };
           im.src = objUrl;
@@ -403,6 +398,9 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
     bingAbs = nextAbs;
     bingIdx = diff;
     localStorage.setItem('nt_bing_abs', bingAbs);
+    // 主动选了非当天壁纸→pin(跨天保持);滚回当天→解除 pin(明天自动更新)
+    if (nextAbs === todayAbs) localStorage.removeItem('nt_bing_pinned');
+    else localStorage.setItem('nt_bing_pinned', '1');
     loadBing();
     // 预取同方向下一张:下次滚轮直接命中缓存
     prefetchWall(toAbs(new Date(parseAbs(nextAbs).getTime() - step * 86400000)));
