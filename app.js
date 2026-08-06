@@ -448,13 +448,29 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
       return null;
     } catch (e) { return null; }
   }
-  // 补一张新图进窗口:优先用 IDB 缓存(零网络),缓存池没有可用图才打 API(重试防重复)
+  // 轮换:缓存池没有不在窗口的图时,把窗口里距 pos 最远的一张挪到尾部(17张无限循环,零网络)
+  function shizRotateFarthest(){
+    if (shizWin.length < 1) return null;
+    let best = -1, bestDist = -1;
+    for (let i = 0; i < shizWin.length; i++){
+      const d = Math.abs(i - shizPos);
+      if (d > bestDist){ bestDist = d; best = i; }
+    }
+    if (best < 0) return null;
+    const item = shizWin.splice(best, 1)[0];
+    if (best < shizPos) shizPos--;        // 删的是 pos 之前的,pos 左移
+    shizWin.push(item);                   // 挪到尾部(当前显示的下一个)
+    return item.img;
+  }
+  // 补一张新图进窗口:优先 IDB 缓存(零网络),其次轮换窗口(无限循环),最后才打 API(重试防重复)
   async function shizAppendNew(){
     if (shizInflight >= 3) return null;   // 预加载并发上限3
     shizInflight++;
     try {
       const fromCache = await shizFromCache();
       if (fromCache){ shizWin.push({ url: fromCache.url, img: fromCache.bmp }); return fromCache.bmp; }
+      const rotated = shizRotateFarthest();
+      if (rotated) return rotated;
       for (let attempt = 0; attempt < 3; attempt++){
         const url = await shizFetchMeta();
         if (!url || shizWin.some(w => w.url === url) || shizPending.has(url)) continue;   // 重复→重抽
