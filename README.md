@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Manifest_V3-blue.svg" alt="Manifest V3">
-  <img src="https://img.shields.io/badge/version-1.4-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.4.1-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/Chromium-compatible-important.svg" alt="Chromium">
   <img src="https://img.shields.io/badge/WebGL2-shader-9cf.svg" alt="WebGL2">
@@ -49,12 +49,7 @@
 
 ### Firefox 用户
 
-> ⚠️ 本扩展的 `.xpi` 包**未签名**，Firefox 默认拒绝安装未签名扩展。安装前**必须先关闭签名验证**：
-
-1. 地址栏输入 `about:config` 回车，点击「接受风险并继续」
-2. 搜索 `xpinstall.signatures.required`
-3. 将该项改为 `false`
-4. 到发行版下载 `liquid-newtab-firefox.xpi` 并安装
+从 [Firefox 附加组件商店（AMO）安装](https://addons.mozilla.org/zh-CN/firefox/addon/liquid-new-tab/)。
 
 > 装完后到 `about:addons` → 该扩展 → 权限，手动同意「替换新标签页」（Firefox 强制要求用户确认，非脚本可绕过）。
 
@@ -112,12 +107,7 @@ Follow these steps in order
 
 ### Firefox users
 
-> ⚠️ The `.xpi` package is **unsigned**; Firefox refuses to install unsigned extensions by default. **You must disable signature verification first:**
-
-1. Enter `about:config` in the address bar and press Enter, then click "Accept the Risk and Continue"
-2. Search for `xpinstall.signatures.required`
-3. Set it to `false`
-4. Download `liquid-newtab-firefox.xpi` from the release and install it
+Install from the [Firefox Add-ons (AMO) store](https://addons.mozilla.org/zh-CN/firefox/addon/liquid-new-tab/).
 
 > After installing, go to `about:addons` → this extension → Permissions and manually allow "Replace new tab" (Firefox requires explicit user confirmation; it cannot be bypassed by script).
 

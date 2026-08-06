@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Liquid New Tab",
-  "version": "1.4",
+  "version": "1.4.1",
   "description": "极简的液态玻璃新标签页",
   "icons": {
     "16": "icon-16.png",
@@ -22,5 +22,17 @@
     "https://www.bing.com/*",
     "https://cn.bing.com/*",
     "https://api.shizuku.l.cd/*"
-  ]
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "liquid-newtab@minecraftgoose.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ],
+        "optional": []
+      }
+    }
+  }
 }
