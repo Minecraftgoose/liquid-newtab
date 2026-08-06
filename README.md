@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Manifest_V3-blue.svg" alt="Manifest V3">
-  <img src="https://img.shields.io/badge/version-1.3.2-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.4-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/Chromium-compatible-important.svg" alt="Chromium">
   <img src="https://img.shields.io/badge/WebGL2-shader-9cf.svg" alt="WebGL2">
@@ -34,7 +34,7 @@
 - **打字机问候语**：按时段逐字打出问候，带闪烁光标
 - **壁纸缓存**：IndexedDB 存储，当天/翻过的壁纸零请求秒开
 - **`/` 快捷键**：任意位置按 `/` 聚焦搜索框
-- 可自定义背景：必应每日壁纸 / 自定义上传图片 / 纯色程序化
+- 可自定义背景：必应每日壁纸 / **Shizuku 随机壁纸** / 自定义上传图片 / 纯色程序化
 - 可自定义搜索引擎：必应 / 百度 / 谷歌 / DuckDuckGo / 自定义模板（`%s` 占位）
 - 右侧滑出式毛玻璃设置面板，板块可折叠
 
@@ -97,7 +97,7 @@ A minimal liquid-glass new-tab extension for browsers. Open a new tab to get a l
 - **Typewriter greeting**: greeting typed out character by character with a blinking cursor
 - **Wallpaper caching**: stored in IndexedDB — zero-request instant load for seen wallpapers
 - **`/` shortcut**: press `/` anywhere to focus the search box
-- Customizable background: Bing daily / uploaded image / procedural solid
+- Customizable background: Bing daily / **Shizuku random** / uploaded image / procedural solid
 - Customizable search engine: Bing / Baidu / Google / DuckDuckGo / custom template (`%s` placeholder)
 - Frosted-glass settings panel slides in from the right, with collapsible sections
 

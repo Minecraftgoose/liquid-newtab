@@ -268,6 +268,29 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
         r.onerror = () => rej(r.error);
       }));
     },
+    delete(key){
+      return this.open().then(db => new Promise((res, rej) => {
+        const r = db.transaction('wall', 'readwrite').objectStore('wall').delete(key);
+        r.onsuccess = () => res();
+        r.onerror = () => rej(r.error);
+      }));
+    },
+    // 列出指定前缀的所有 {key, value}(按 key 升序)
+    getAllByPrefix(prefix){
+      return this.open().then(db => new Promise((res, rej) => {
+        const r = db.transaction('wall', 'readonly').objectStore('wall').openCursor();
+        const out = [];
+        r.onsuccess = () => {
+          const cur = r.result;
+          if (cur){
+            const k = String(cur.key);
+            if (k.indexOf(prefix) === 0) out.push({ k, v: cur.value });
+            cur.continue();
+          } else res(out);
+        };
+        r.onerror = () => rej(r.error);
+      }));
+    },
     // 删掉窗口外([今天-7,今天])的缓存 key(防塞爆)
     pruneOld(){
       return this.open().then(db => new Promise((res) => {
@@ -373,21 +396,214 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
     }).catch(() => {});
   }
 
+  // ============ Shizuku 随机壁纸:本地滑动窗口(当前 + 上2 + 下2, 上限5) ============
+  // 往下滚=请求新随机图;往上滚=回看已加载的历史;出窗口即删(IDB 同步删 + blob URL 撤销)
+  let shizWin = [];      // [{url, img, u}]  u=blob URL(可撤销)
+  let shizPos = -1;      // 当前显示下标
+  let shizInflight = 0;  // 并发下载计数(上限2)
+  let shizPending = new Set();   // 正在下载的 url(防并发重复)
+
+  function shizUrl(){ return 'https://api.shizuku.l.cd/?img=xn&format=json'; }
+  function shizKey(u){ return 'shiz_' + u; }
+  function shizPersist(){  // 存窗口 url 列表 + 当前位,刷新恢复
+    try { localStorage.setItem('nt_shiz_win', JSON.stringify({ urls: shizWin.map(w => w.url), pos: shizPos })); } catch (e) {}
+  }
+  async function shizFetchMeta(){
+    const r = await fetch(shizUrl(), { cache: 'no-store' }).then(r => r.json());
+    return r.data && r.data.url;
+  }
+  // 返回 ImageBitmap(worker 线程解码,不卡主线程);失败返回 null
+  async function shizLoadImage(url){
+    try {
+      // 先查 IDB,命中直接解码缓存
+      const cached = await idb.get(shizKey(url));
+      if (cached && cached.blob){
+        return await createImageBitmap(cached.blob);
+      }
+      // 未命中:下载 + 解码 + 压缩存 IDB(带 ts 供容量淘汰)
+      const blob = await fetch(url, { cache: 'no-store' }).then(r => r.blob());
+      const bmp = await createImageBitmap(blob);
+      toCacheBlob(bmp).then(cb => {
+        if (cb) idb.set(shizKey(url), { blob: cb, ts: Date.now() }).catch(() => {});
+      });
+      return bmp;
+    } catch (e) { return null; }
+  }
+  // 请求一张新图并挂到窗口尾部(抽到重复/下载失败内部重试,最多3次)
+  // 从 IDB 缓存池取一张不在窗口/下载中的图(零网络),取到返回 {url, bmp},没有返回 null
+  async function shizFromCache(){
+    try {
+      const all = await idb.getAllByPrefix('shiz_');
+      for (const { k, v } of all){
+        const url = k.slice('shiz_'.length);
+        if (shizWin.some(w => w.url === url) || shizPending.has(url)) continue;
+        if (!v || !v.blob) continue;
+        shizPending.add(url);
+        try {
+          const bmp = await createImageBitmap(v.blob);
+          return { url, bmp };
+        } catch (e) { continue; }
+        finally { shizPending.delete(url); }
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+  // 补一张新图进窗口:优先用 IDB 缓存(零网络),缓存池没有可用图才打 API(重试防重复)
+  async function shizAppendNew(){
+    if (shizInflight >= 3) return null;   // 预加载并发上限3
+    shizInflight++;
+    try {
+      const fromCache = await shizFromCache();
+      if (fromCache){ shizWin.push({ url: fromCache.url, img: fromCache.bmp }); return fromCache.bmp; }
+      for (let attempt = 0; attempt < 3; attempt++){
+        const url = await shizFetchMeta();
+        if (!url || shizWin.some(w => w.url === url) || shizPending.has(url)) continue;   // 重复→重抽
+        shizPending.add(url);
+        try {
+          const bmp = await shizLoadImage(url);
+          if (!bmp) continue;                                    // 下载/解码失败→重抽
+          shizWin.push({ url, img: bmp });
+          return bmp;
+        } finally { shizPending.delete(url); }                   // 成败都清,不占坑
+      }
+      return null;
+    } catch (e) { return null; }
+    finally { shizInflight--; }
+  }
+  // 裁剪窗口:只留 [pos-4, pos+5](共10张),左侧 ImageBitmap close 释放显存
+  // IDB 缓存保留(图池小,重复抽到直接命中,不重复下载);容量上限由 shizPrune 管
+  function shizTrim(){
+    const cut = shizPos - 4;
+    if (cut > 0){
+      const gone = shizWin.splice(0, cut);
+      shizPos -= cut;
+      gone.forEach(w => { if (w.img && w.img.close) w.img.close(); });
+    }
+  }
+  // IDB 缓存容量管理:shiz_ 前缀超过 150 张,删 ts 最旧的(防塞爆)
+  async function shizPrune(){
+    try {
+      const db = await idb.open();
+      const store = db.transaction('wall', 'readonly').objectStore('wall');
+      const all = await new Promise((res, rej) => {
+        const r = store.openCursor();
+        const items = [];
+        r.onsuccess = () => {
+          const cur = r.result;
+          if (cur){ items.push({ k: cur.key, v: cur.value }); cur.continue(); }
+          else res(items);
+        };
+        r.onerror = () => rej(r.error);
+      });
+      const shiz = all.filter(x => String(x.k).indexOf('shiz_') === 0);
+      if (shiz.length <= 150) return;
+      shiz.sort((a, b) => ((a.v && a.v.ts) || 0) - ((b.v && b.v.ts) || 0));
+      const rm = shiz.slice(0, shiz.length - 150);
+      const st = db.transaction('wall', 'readwrite').objectStore('wall');
+      rm.forEach(x => st.delete(x.k));
+    } catch (e) {}
+  }
+  // 预加载:先按当前 pos 裁剪,再补满 10 张(每轮循环,窗口永远满,不会缩水);连续 4 轮全失败才停
+  let shizPreloadChain = Promise.resolve();   // 串行化,防并发空转
+  async function shizDoPreload(){
+    let fails = 0;
+    while (fails < 4){
+      shizTrim();                    // 先按当前 pos 裁剪 [pos-4, pos+5]
+      if (shizWin.length >= 10) break;   // 已满:停
+      const need = 10 - shizWin.length;
+      const jobs = [];
+      for (let i = 0; i < need; i++) jobs.push(shizAppendNew());   // 并发补(内部限3+重试)
+      const done = await Promise.all(jobs);
+      if (done.some(Boolean)) fails = 0;   // 有成功:重置失败计数
+      else fails++;                        // 全失败:重试一轮
+    }
+    shizTrim();
+    shizPrune();   // IDB 容量管理(防塞爆)
+    shizPersist();
+  }
+  function shizPreload(){
+    shizPreloadChain = shizPreloadChain.then(shizDoPreload).catch(() => {});
+    return shizPreloadChain;
+  }
+  // 显示指定下标(带动画),pos 更新 + 持久化
+  function shizShow(i){
+    const w = shizWin[i]; if (!w || !w.img) return;
+    apply(w.img, true);
+    shizPos = i;
+    shizPersist();
+  }
+  // 滚动:dir=1 往下(新图), dir=-1 往上(回看)
+  function shizNext(dir){
+    if (shizWin.length === 0) return;
+    if (dir === 1){
+      const next = shizPos + 1;
+      if (next < shizWin.length){
+        mixDir = 1; shizShow(next);
+        shizPreload();   // 补尾部新图 + 裁剪
+      } else {
+        // 已到窗口尾:预加载链补足 pos+1,完成即切入(推拉门)
+        mixDir = 1;
+        shizPreload().then(() => {
+          if (shizWin[shizPos + 1]) shizShow(shizPos + 1);
+        });
+      }
+    } else {
+      if (shizPos <= 0) return;   // 已是最旧,锁
+      mixDir = -1; shizShow(shizPos - 1);
+    }
+  }
+  // 首次加载:恢复 IDB 窗口,没有则从当前图开始
+  async function loadShizuku(){
+    document.getElementById('wallInfo').textContent = '';   // 纯图无文字
+    try {
+      const saved = JSON.parse(localStorage.getItem('nt_shiz_win') || 'null');
+      if (saved && saved.urls && saved.urls.length){
+        // 逐张从 IDB 恢复,失败的跳过
+        const win = [];
+        for (const u of saved.urls){
+          try {
+            const cached = await idb.get(shizKey(u));
+            if (cached && cached.blob){
+              win.push({ url: u, img: await createImageBitmap(cached.blob) });
+            }
+          } catch (e) {}
+        }
+        if (win.length){
+          shizWin = win;
+          shizPos = Math.min(saved.pos, shizWin.length - 1);
+          apply(shizWin[shizPos].img, true);
+          shizPersist();
+          shizPreload();
+          return;
+        }
+      }
+      // 全新开始:请求当前图 + 预加载 2 张
+      shizWin = []; shizPos = -1;
+      const first = await shizAppendNew();   // 成功时已 push 进 shizWin
+      if (first){
+        shizPos = 0;
+        apply(shizWin[0].img, true);
+        shizPreload();
+      }
+    } catch (e) { /* 加载失败 → 程序化背景 */ }
+  }
+
   function loadWallpaper(){
     const mode = localStorage.getItem('nt_bg_mode') || 'bing';
     if (mode === 'custom') {
       const data = localStorage.getItem('nt_bg');
       if (data) { const im = new Image(); im.onload = () => apply(im, true); im.src = data; return; }
     }
+    if (mode === 'shizuku') { loadShizuku(); return; }
     if (mode === 'bing' || mode === 'custom') loadBing();
     // procedural: 不加载, hasTex 保持 0 -> 程序化背景
   }
   loadWallpaper();
 
-  // 换壁纸:仅必应模式;dir=1 往后翻(更旧),dir=-1 往前翻(更新);绝对日期持久化
-  // 边界:窗口 = [今天-7, 今天],出窗口禁止再滚
+  // 换壁纸分发:bing 走日期窗口,shizuku 走滑动窗口;dir=1 往下,dir=-1 往上
   window.nextWallpaper = function(dir){
     const mode = localStorage.getItem('nt_bg_mode') || 'bing';
+    if (mode === 'shizuku'){ shizNext(dir); return; }
     if (mode !== 'bing') return;
     const step = (dir === -1) ? -1 : 1;
     // 滚下(dir=1)=看更旧=日期减一天;滚上(dir=-1)=看更新=日期加一天
@@ -402,9 +618,24 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
     if (nextAbs === todayAbs) localStorage.removeItem('nt_bing_pinned');
     else localStorage.setItem('nt_bing_pinned', '1');
     loadBing();
-    // 预取同方向下一张:下次滚轮直接命中缓存
-    prefetchWall(toAbs(new Date(parseAbs(nextAbs).getTime() - step * 86400000)));
+    // 窗口预取:目标日期前后各 2 天都提前缓存(受 [今天-7,今天] 窗口约束),上下滚都命中缓存
+    for (let off = -2; off <= 2; off++){
+      prefetchWall(toAbs(new Date(parseAbs(nextAbs).getTime() + off * 86400000)));
+    }
   };
+
+  // 左侧竖胶囊按钮:上=dir=1(shizuku 新图 / 必应更旧),下=dir=-1(shizuku 回看 / 必应更新)
+  const wallCtrl = document.getElementById('wallCtrl');
+  const wallUp = document.getElementById('wallUp');
+  const wallDown = document.getElementById('wallDown');
+  function syncWallCtrl(){
+    if (!wallCtrl) return;
+    const m = localStorage.getItem('nt_bg_mode') || 'bing';
+    wallCtrl.classList.toggle('show', m === 'bing' || m === 'shizuku');
+  }
+  if (wallUp) wallUp.addEventListener('click', () => { window.nextWallpaper(1); });
+  if (wallDown) wallDown.addEventListener('click', () => { window.nextWallpaper(-1); });
+  syncWallCtrl();
 
   // 面板:背景来源切换(自定义下拉) + 上传
   const bgUpload = document.getElementById('bgUpload');
@@ -415,7 +646,7 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
   const bgModeLabel = document.getElementById('bgModeLabel');
   const bgModeDp = document.getElementById('bgModeDp');
 
-  var BG_OPTS = { bing:'必应每日壁纸', custom:'自定义图片', procedural:'纯色程序化' };
+  var BG_OPTS = { bing:'必应每日壁纸', shizuku:'Shizuku 随机壁纸', custom:'自定义图片', procedural:'纯色程序化' };
 
   function syncBgUI(){
     var m = localStorage.getItem('nt_bg_mode') || 'bing';
@@ -448,6 +679,7 @@ let mixAmt = 1, mixDir = 1;   // 壁纸过渡进度(1=完成)与方向(1=上滑,
       localStorage.setItem('nt_bg_mode', val);
       hasTex = 0;
       syncBgUI();
+      syncWallCtrl();
       loadWallpaper();
       bgModeWrap.classList.remove('open');
     });
@@ -530,6 +762,7 @@ document.addEventListener('mousemove', e => {
 
 stage.addEventListener('pointerdown', e => {
   if (e.target.closest('#search')) return;
+  if (e.target.closest('#wallCtrl')) return;   // 壁纸切换按钮不触发液滴拖拽
   pointer = { x: e.offsetX, y: e.offsetY };
   if (state === 'CAPSULE') { retract(); return; }
   state = 'DRAG';
@@ -779,17 +1012,6 @@ bind('ZE', v => P.ze = v / 100, v => (v / 100).toFixed(2));
     })();
   }
   typeGreet();
-
-  // 滚轮换壁纸(仅必应模式):排除面板区域,防抖 400ms
-  let wheelLock = 0;
-  document.addEventListener('wheel', (e) => {
-    if (e.target && e.target.closest && e.target.closest('#panel')) return;
-    if (e.target && e.target.closest && e.target.closest('#search')) return;
-    const now = Date.now();
-    if (now - wheelLock < 250) return;
-    wheelLock = now;
-    if (typeof window.nextWallpaper === 'function') window.nextWallpaper(e.deltaY > 0 ? 1 : -1);
-  }, { passive: true });
 
   // '/' 唤出搜索胶囊并聚焦(在输入框内按 / 不抢焦点)
   const box = document.getElementById('searchInput');
