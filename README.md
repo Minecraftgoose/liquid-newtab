@@ -29,10 +29,10 @@
 
 - 液态玻璃搜索框：从顶部黑边往下拖拽，液滴渗出、弹簧形变成搜索胶囊
 - 必应每日壁纸背景，液态玻璃直接折射壁纸
-- **滚轮换壁纸**：滚动切换最近 8 天必应壁纸，推拉门切换动画，索引跨天保持（掉出窗口自动回退最新）
-- **壁纸信息角标**：右下角显示当前壁纸标题与摄影师
+- **壁纸切换按钮**：屏幕左侧竖胶囊毛玻璃，上下按钮切换壁纸（必应按天翻页 / Shizuku 随机），推拉门切换动画
+- **壁纸缓存**：IndexedDB 存储 + 窗口预取——必应上下各 2 天提前缓存；Shizuku 图池全缓存后纯本地零请求
+- **壁纸信息角标**：右下角显示当前壁纸标题与摄影师（必应模式）
 - **打字机问候语**：按时段逐字打出问候，带闪烁光标
-- **壁纸缓存**：IndexedDB 存储，当天/翻过的壁纸零请求秒开
 - **`/` 快捷键**：任意位置按 `/` 聚焦搜索框
 - 可自定义背景：必应每日壁纸 / **Shizuku 随机壁纸** / 自定义上传图片 / 纯色程序化
 - 可自定义搜索引擎：必应 / 百度 / 谷歌 / DuckDuckGo / 自定义模板（`%s` 占位）
@@ -65,7 +65,7 @@
 - 从屏幕最上边往下拖，液态玻璃搜索胶囊从边缘渗出
 - 输入回车搜索（输入像网址则直接打开）
 - 鼠标移到屏幕右侧唤出设置面板，点板块标题展开 / 收起
-- **滚轮滚动**切换必应壁纸（滚下看更旧，滚上看更新）
+- 点屏幕左侧竖胶囊的**上/下箭头**切换壁纸（必应：下=更旧、上=更新；Shizuku：下=新随机图、上=回看）
 - 按 **`/`** 快速聚焦搜索框
 
 ## 技术栈
@@ -92,10 +92,10 @@ A minimal liquid-glass new-tab extension for browsers. Open a new tab to get a l
 
 - Liquid-glass search capsule: drag down from the top edge to let the droplet seep out and spring into a search pill
 - Bing daily wallpaper as background, refracted directly through the glass
-- **Scroll to switch wallpaper**: cycle through the last 8 days of Bing wallpapers with a push-pull transition; index persists across days (falls back to the latest when out of range)
-- **Wallpaper info badge**: title and photographer shown at the bottom-right corner
+- **Wallpaper switch buttons**: vertical frosted-glass capsule on the left edge, up/down buttons to switch wallpapers (Bing: day-based paging / Shizuku: random), with push-pull transition
+- **Wallpaper caching**: IndexedDB + window prefetch — Bing prefetches 2 days around the target; Shizuku goes fully offline once the pool is cached
+- **Wallpaper info badge**: title and photographer shown at the bottom-right corner (Bing mode)
 - **Typewriter greeting**: greeting typed out character by character with a blinking cursor
-- **Wallpaper caching**: stored in IndexedDB — zero-request instant load for seen wallpapers
 - **`/` shortcut**: press `/` anywhere to focus the search box
 - Customizable background: Bing daily / **Shizuku random** / uploaded image / procedural solid
 - Customizable search engine: Bing / Baidu / Google / DuckDuckGo / custom template (`%s` placeholder)
@@ -126,7 +126,7 @@ Follow these steps in order
 - Drag down from the top of the screen to seep out the search capsule
 - Type and press Enter to search (directly opens if it looks like a URL)
 - Move the mouse to the right edge to open settings; click a section title to expand / collapse
-- **Scroll** to switch Bing wallpapers (scroll down for older, up for newer)
+- Click the **up/down arrows** on the left vertical capsule to switch wallpapers (Bing: down=older, up=newer; Shizuku: down=new random, up=back)
 - Press **`/`** to quickly focus the search box
 
 ## Tech Stack
